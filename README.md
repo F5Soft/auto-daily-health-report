@@ -1,9 +1,22 @@
 <!-- omit in toc -->
+
 # Auto Daily Health Report
 
 用最省力的方式完成 [厦门大学·每日健康打卡 (Daily Health Report)](https://xmuxg.xmu.edu.cn/app/214) 。
 
 <!-- omit in toc -->
+<hr>
+
+相较于原先的版本，更新`checkin.py`代码的部分逻辑，使用Python内置`html.parser`替代`bs4`，编写`auto.py`示例，通过schedule模块自动化打卡。
+
+自动化打卡示例地址：https://f5soft.site/a/daily_health_report
+
+<hr>
+
+以下为原作者Readme
+
+<hr>
+
 ## Table of Contents
 
 - [这是什么？](#这是什么)
@@ -126,7 +139,7 @@ python recent.py [cookie:SAAS_U]
 ## 常见问题（FAQ）
 
 **Q: 把学工号和统一认证密码直接喂给这个程序，安全吗？**
-   
+
 A: 这个程序不会储存你输入的任何用户名、密码或 Cookie, 也不会将获得和输入的用户名、密码、Cookie 等信息发送到除 `*.xmu.edu.cn` 之外的其它网站。因此在没有人窥屏你的电脑的情况下，你可以认为它是安全的。
 
 **Q: 我还是要每天运行一遍 checin.py 打卡吗？有没有什么每天无人值守自动打卡的方法？**
@@ -238,7 +251,7 @@ crontab auto-report.cron
 
 ```
 https://ami.kirainmoe.com:2333/XMUHealth/checkInByCookie?cookie=[cookie]
-``` 
+```
 
 将 `[cookie]` 替换成你获得 Cookie 即可，该地址不会保存你的 Cookie 信息。
 

@@ -1,129 +1,175 @@
+import time
+from html.parser import HTMLParser
+
 import requests
-import json
-import sys
 
-from login import login
 
-username = ""
-password = ""
-cookie = ""
-use_cookie = False
-
-if len(sys.argv) == 2:
-    cookie = sys.argv[1]
-    use_cookie = True
-elif len(sys.argv) == 3:
-    username = sys.argv[1]
-    password = sys.argv[2]
-else:
-    print("Usage: python checkin.py [username] [password]")
-    print("   or: python checkin.py [cookie:SAAS_U]")
-    sys.exit(1)
-
-http_header = {
+req_headers_login = {
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Language': 'en-GB,en;q=0.9,en-US;q=0.8,zh-TW;q=0.7,zh-CN;q=0.6,zh;q=0.5',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) '
                   'Chrome/81.0.4044.138 Safari/537.36',
     'Referer': 'https://xmuxg.xmu.edu.cn/xmu/login?app=214'
 }
 
-# create session
-session = requests.Session()
-
-# login
-login(session, username, password, cookie, use_cookie, http_header)
-
-# get form id
-now_url = "https://xmuxg.xmu.edu.cn/api/app/214/business/now"
-resp = None
-form_id = None
-try:
-    resp = session.get(now_url).text
-    form_id = str(json.loads(resp)['data'][0]['business']['id'])
-except Exception:
-    print(json.dumps({
-        "status": "failed",
-        "reason": "Login failed (incorrect auth info or captcha required)"
-    }, indent=4))
-    sys.exit(1)
-
-# get form instance
-form_url = "https://xmuxg.xmu.edu.cn/api/formEngine/business/%s/formRenderData?playerId=owner" % form_id
-form_components = None
-try:
-    resp = session.get(form_url, headers=http_header).text
-    form_components = json.loads(resp)["data"]["components"]
-except Exception:
-    print(json.dumps({
-        "status": "failed",
-        "reason": "Internal server error (logged in but cannot get form id)"
-    }, indent=4))
-    sys.exit(1)
-
-# get owner modification
-form_instance_url = "https://xmuxg.xmu.edu.cn/api/formEngine/business/%s/myFormInstance" % form_id
-resp = session.get(form_instance_url, headers=http_header).text
-form_json = json.loads(resp)["data"]
-instance_id = form_json["id"]
-
-# change form content
-value_list = {}
-for (k, v) in enumerate(form_json["formData"]):
-    name = v['name']
-    hide = v['hide']
-    title = v['title']
-    value = {}
-
-    if "学生本人是否填写" in title:
-        value['stringValue'] = '是'
-    elif "Can you hereby declare that" in title:
-        value['stringValue'] = '是 Yes'
-    elif v['value']['dataType'] == 'STRING':
-        value['stringValue'] = v['value']['stringValue']
-    elif v['value']['dataType'] == 'ADDRESS_VALUE':
-        value['addressValue'] = v['value']['addressValue']
-
-    value_list[name] = {
-        'hide': hide,
-        'title': title,
-        'value': value
-    }
-
-# prepare post data
-post_array = []
-for item in form_components:
-    name = item['name']
-    if name in value_list:
-        hide = True if value_list[name]['hide'] else False
-        if 'select' in name and 'stringValue' in value_list[name]['value'] and value_list[name]['value']['stringValue'] == "":
-            hide = True
-        post_array.append({
-            'name': name,
-            'title': value_list[name]['title'],
-            'value': value_list[name]['value'],
-            'hide': hide
-        })
-    else:
-        post_array.append({
-            'name': name,
-            'title': item['title'],
-            'value': {},
-            'hide': True if 'label' not in name else False,
-        })
-
-
-# post change
-post_modify_url = "https://xmuxg.xmu.edu.cn/api/formEngine/formInstance/" + instance_id
-post_json = {
-    "formData": post_array,
-    "playerId": "owner"
+req_headers_login_post = {
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Language': 'en-GB,en;q=0.9,en-US;q=0.8,zh-TW;q=0.7,zh-CN;q=0.6,zh;q=0.5',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) '
+                  'Chrome/81.0.4044.138 Safari/537.36',
+    'Referer': 'https://ids.xmu.edu.cn/authserver/login?service=https://xmuxg.xmu.edu.cn/login/cas/xmu'
 }
-post_json_str = json.dumps(post_json, ensure_ascii=False)
-http_header['Content-Type'] = 'application/json'
-http_header['Referer'] = 'https://xmuxg.xmu.edu.cn/app/214'
-resp = session.post(post_modify_url, headers=http_header, data=post_json_str.encode('utf-8'))
 
-print(json.dumps({
-    "status": "success",
-    "info": "automatically checked in successfully.",
-    "name": form_json["owner"]["name"]
-}, indent=4, ensure_ascii=False))
+req_headers = {
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Language': 'en-GB,en;q=0.9,en-US;q=0.8,zh-TW;q=0.7,zh-CN;q=0.6,zh;q=0.5',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) '
+                  'Chrome/81.0.4044.138 Safari/537.36',
+    'Referer': 'https://xmuxg.xmu.edu.cn/app/214'
+}
+
+
+class OauthParser(HTMLParser):
+    def __init__(self, number: str, password: str):
+        super().__init__()
+        self.req_body = {'username': number, 'password': password}
+
+    def handle_starttag(self, tag: str, attrs: list):
+        if tag == 'input':
+            attrs = dict(attrs)
+            name = attrs.get('name')
+            value = attrs.get('value')
+            if name in ['lt', 'dllt', 'execution', '_eventId', 'rmShown']:
+                self.req_body[name] = value
+
+    def error(self, message):
+        pass
+
+    @staticmethod
+    def create_req_body(html: str, number: str, password) -> dict:
+        parser = OauthParser(number, password)
+        parser.feed(html)
+        return parser.req_body
+
+
+def modified_form_data(form_data: list, form_template: list):
+    form_data_dict = {}
+    for item in form_data:
+        value = {}
+        name = item['name']
+        hide = bool(item['hide'])
+        title = item['title']
+        if "本人是否承诺所填报的全部内容" in title:
+            value['stringValue'] = '是 Yes'
+        elif "学生本人是否填写" in title:
+            value['stringValue'] = '是'
+        elif item['value']['dataType'] == 'STRING':
+            value['stringValue'] = item['value']['stringValue']
+        elif item['value']['dataType'] == 'ADDRESS_VALUE':
+            value['addressValue'] = item['value']['addressValue']
+        form_data_dict[name] = {'hide': hide, 'title': title, 'value': value}
+
+    form_data_modified = []
+    for item in form_template:
+        name = item['name']
+        if name in form_data_dict:
+            form_data_modified.append({
+                'name': name,
+                'title': form_data_dict[name]['title'],
+                'value': form_data_dict[name]['value'],
+                'hide': form_data_dict[name]['hide']
+            })
+        else:
+            form_data_modified.append({
+                'name': name,
+                'title': item['title'],
+                'value': {},
+                'hide': 'label' not in name
+            })
+    return form_data_modified
+
+
+def checkin(number: str, password: str):
+    session = requests.Session()
+
+    # login page
+    req_url = "https://ids.xmu.edu.cn/authserver/login?service=https://xmuxg.xmu.edu.cn/login/cas/xmu"
+    res = session.get(req_url, headers=req_headers_login)
+
+    # login post
+    req_body = OauthParser.create_req_body(res.text, number, password)
+    res = session.post(req_url, req_body, headers=req_headers_login_post)
+    cookies = res.cookies.get('SAAS_U')
+
+    # get form id
+    req_url = "https://xmuxg.xmu.edu.cn/api/app/214/business/now"
+    res = session.get(req_url, headers=req_headers)
+    business_id = str(res.json()['data'][0]['business']['id'])
+
+    # get form template
+    req_url = "https://xmuxg.xmu.edu.cn/api/formEngine/business/%s/formRenderData?playerId=owner" % business_id
+    res = session.get(req_url, headers=req_headers)
+    form_template = res.json()['data']['components']
+
+    # get owner modification
+    req_url = "https://xmuxg.xmu.edu.cn/api/formEngine/business/%s/myFormInstance" % business_id
+    res = session.get(req_url, headers=req_headers)
+    form = res.json()['data']
+    form_id = form['id']
+    form_data = form['formData']
+
+    # post change
+    req_url = "https://xmuxg.xmu.edu.cn/api/formEngine/formInstance/" + form_id
+    req_body = {"formData": modified_form_data(
+        form_data, form_template), "playerId": "owner"}
+    session.post(req_url, json=req_body, headers=req_headers)
+
+
+def check(number: str, password: str):
+    session = requests.Session()
+
+    # login page
+    req_url = "https://ids.xmu.edu.cn/authserver/login?service=https://xmuxg.xmu.edu.cn/login/cas/xmu"
+    res = session.get(req_url, headers=req_headers_login)
+
+    # login post
+    req_body = OauthParser.create_req_body(res.text, number, password)
+    res = session.post(req_url, req_body, headers=req_headers_login_post)
+    cookies = res.cookies.get('SAAS_U')
+
+    # get form id
+    req_url = "https://xmuxg.xmu.edu.cn/api/app/214/business/now"
+    res = session.get(req_url, headers=req_headers)
+    business_id = str(res.json()['data'][0]['business']['id'])
+    business_time = str(res.json()['data'][0]['business']['name'])
+
+    # get owner modification
+    req_url = "https://xmuxg.xmu.edu.cn/api/formEngine/business/%s/myFormInstance" % business_id
+    res = session.get(req_url, headers=req_headers)
+    form = res.json()['data']
+    form_id = form['id']
+
+    req_url = "https://xmuxg.xmu.edu.cn/api/formEngine/formInstances/%s/changeLogs?playerId=owner&businessId=%s" \
+              % (business_id, form_id)
+    res = session.get(req_url)
+    log = res.json()['data']['logs']
+
+    return len(log) > 0 and business_time == time.strftime("%Y-%m-%d", time.localtime())
+
+
+def get_cookie(number: str, password: str):
+    session = requests.Session()
+
+    # login page
+    req_url = "https://ids.xmu.edu.cn/authserver/login?service=https://xmuxg.xmu.edu.cn/login/cas/xmu"
+    res = session.get(req_url, headers=req_headers_login)
+
+    # login post
+    req_body = OauthParser.create_req_body(res.text, number, password)
+    res = session.post(req_url, req_body, headers=req_headers_login_post)
+    cookies = res.cookies.get('SAAS_U')
+    print(cookies)
+    return cookies
